@@ -1,0 +1,304 @@
+# PLANISUSS WORLD PROJECT CODE #
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import matplotlib.colors as mcolors
+from matplotlib.widgets import Button
+
+# Styling for the appearance (fast rendering)
+plt.style.use("fast")
+
+# 'black' is the color for the background and empty ground cells (value 0)
+# 'blue' is for water (value 1),
+# 'red' is for Carviz (value 2),
+# 'green' is for Vegetob (value 3)
+# 'yellow' is for Erbast (value 4)
+
+# Define the colors for each creature and the background.
+# Alpha is set to 1 for full opacity.
+colors = [(0, 0, 0, 1), (0, 0, 1, 1), (1, 0, 0, 1), (0, 0.5, 0, 1), (1, 1, 0, 1)]
+# Create a colormap from the list of colors
+cmap = mcolors.ListedColormap(colors)
+
+N_ROWS = 100
+N_COLS = 100
+WATER_PROBABILITY = 0.1
+
+
+class Creature:
+    instances = []
+
+    def __init__(self, grid, density, representation):
+        self.grid = grid
+        self.color_grid = np.zeros((N_ROWS, N_COLS, 4))  # RGBA values
+        self.density = density
+        self.representation = representation
+        Creature.instances.append(self)
+
+    def add_creatures(self):
+        ground_coords = np.argwhere(self.grid == 0)
+        for x, y in ground_coords:
+            if np.random.rand() < self.density / 100 and self.grid[x, y] == 0:
+                self.grid[x, y] = self.representation
+
+    def move(self):
+        pass
+
+    def die(self):
+        pass
+
+
+class Vegetob(Creature):
+    def __init__(self, grid, density=5):
+        # Call the __init__ method of the superclass (Creature) to initialize.
+        super().__init__(grid, density, representation=3) 
+        self.days_alive = 0  # To keep track of how many days Vegetob has been alive
+
+    def grow(self):
+        # Find the coordinates of all cells occupied by Vegetob on the grid.
+        vegetob_coordinates = np.argwhere(self.grid == self.representation)  
+        for x, y in vegetob_coordinates:
+            directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]   # neighbouring cells
+            np.random.shuffle(directions)
+            for d in directions:
+                new_x, new_y = x + d[0], y + d[1]   # update the x and y coordinate.
+                # Check if the new coordinates are within the bounds.
+                if new_x < N_ROWS and new_x >= 0 and new_y < N_COLS and new_y >= 0:
+                    if self.grid[new_x, new_y] == 0:  # if it is an empty ground cell
+                        # Introduce randomness for growth (5% chance of growing)
+                        if np.random.rand() < 0.05:
+                            opacity = np.random.uniform(0.1, 1) # supposed to grow with a random opacity
+                            vegetob_color = (0, 0.5, 0, opacity)
+                            self.grid[new_x, new_y] = self.representation
+                            self.color_grid[new_x, new_y] = vegetob_color
+                            break
+
+    def move(self):
+        pass  # Vegetob doesn't move
+
+    def die(self):
+        # Check if the Vegetob has been alive for 25 days.
+        if self.days_alive == 25:
+            # There's a 20% chance of dying (disappearing from the cell)
+            if np.random.rand() < 0.2:
+                x, y = np.argwhere(self.grid == self.representation)[0]
+                self.grid[x, y] = 0  # Disappear from the current cell
+
+
+class Erbast(Creature):
+    def __init__(self, grid, density=10):
+        super().__init__(grid, density, representation=4)
+        self.days_alive = 0  # To keep track of how many days Erbast has been alive
+
+    def move(self):
+        erb_coordinates = np.argwhere(self.grid == self.representation)
+        for x, y in erb_coordinates:
+            directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            np.random.shuffle(directions)
+            for d in directions:
+                new_x, new_y = x + d[0], y + d[1]
+                if new_x < N_ROWS and new_x >= 0 and new_y < N_COLS and new_y >= 0:
+                    if (
+                        self.grid[new_x, new_y] == 0 or self.grid[new_x, new_y] == 3
+                    ):  # Empty cell or cell contains a Vegetob
+                        # Store the previous state of the cell
+                        prev_state = self.grid[new_x, new_y]
+                        # Move the Erbast to the new cell
+                        self.grid[new_x, new_y] = self.representation
+                        # Restore the previous state of the old cell
+                        self.grid[x, y] = prev_state
+                        break
+
+    def die(self):
+        # Check if the Erbast has been alive for 30 days.
+        if self.days_alive == 30:
+            # There's a 20% chance of dying (disappearing from the cell).
+            if np.random.rand() < 0.2:
+                x, y = np.argwhere(self.grid == self.representation)[0]
+                self.grid[x, y] = 0  # Disappear from the current cell
+
+
+class Carviz(Creature):
+    def __init__(self, grid, density=10):
+        super().__init__(grid, density, representation=2)
+        self.days_alive = 0  # To keep track of how many days Carviz has been alive.
+
+    def move(self):
+        carv_coordinates = np.argwhere(self.grid == self.representation)
+        for x, y in carv_coordinates:
+            directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            np.random.shuffle(directions)
+            for d in directions:
+                new_x, new_y = x + d[0], y + d[1]
+                if new_x < N_ROWS and new_x >= 0 and new_y < N_COLS and new_y >= 0:
+                    if self.grid[new_x, new_y] == 4:  # Cell contains an Erbast
+                        fight_result = np.random.choice([2, 4], p=[0.6, 0.4]) # 60% chance of the Carviz winning the struggle.
+                        if fight_result == 2:  # Carviz wins.
+                            self.grid[new_x, new_y] = self.representation
+                            self.grid[x, y] = 0
+                        else:  # Carviz loses and dies.
+                            self.grid[x, y] = 0 
+                        break
+                    elif (
+                        self.grid[new_x, new_y] == 0 or self.grid[new_x, new_y] == 3
+                    ):  # Empty cell or cell contains a Vegetob
+                        # Store the previous state of the cell.
+                        prev_state = self.grid[new_x, new_y]
+                        # Move the Carviz to the new cell, by eating the Vegetob if it was a Vegetob cell.
+                        self.grid[new_x, new_y] = self.representation
+                        # Restore the previous state of the old cell.
+                        self.grid[x, y] = prev_state
+                        break
+
+    def die(self):
+        # Check if the Carviz has been alive for 10 days.
+        if self.days_alive == 10:
+            # There's a 10% chance of dying (disappearing from the cell).
+            if np.random.rand() < 0.1:
+                x, y = np.argwhere(self.grid == self.representation)[0]
+                self.grid[x, y] = 0  # Disappear from the current cell
+
+
+if __name__ == "__main__":
+    grid = np.zeros((N_ROWS, N_COLS))
+    grid[0, :] = 1  # Each water border has thickness of 2 pixels.
+    grid[1, :] = 1
+
+    grid[-1, :] = 1
+    grid[-2, :] = 1
+
+    grid[:, 0] = 1
+    grid[:, 1] = 1
+
+    grid[:, -1] = 1
+    grid[:, -2] = 1
+
+    # Assign random water cells inside the island.
+    for _ in range(N_ROWS * N_COLS):               
+        if np.random.rand() < WATER_PROBABILITY:    
+            x, y = np.random.randint(2, N_ROWS - 2), np.random.randint(2, N_COLS - 2) 
+            grid[x, y] = 1
+
+    Vegetob(grid).add_creatures()
+    Erbast(grid).add_creatures()
+    Carviz(grid).add_creatures()
+
+    # Create an initial display.
+    fig = plt.figure(figsize=(12, 6), facecolor="black")
+
+    # Add two subplots to the figure.
+    ax1 = fig.add_subplot(1, 2, 1)  # simulation
+    ax2 = fig.add_subplot(1, 2, 2)  # bar chart
+
+    # Create a new axes instance and add a button to it.
+    pause_ax = fig.add_axes([0.7, 0.025, 0.1, 0.04])
+    pause_button = Button(pause_ax, "Pause", hovercolor="0.975")
+
+    # Update the ButtonHandler class.
+    class ButtonHandler:
+        def __init__(self):
+            self.is_paused = False
+
+        def pause(self, event):
+            if self.is_paused:
+                anim.event_source.start()
+                self.is_paused = False
+                pause_button.label.set_text("Pause")
+            else:
+                anim.event_source.stop()
+                self.is_paused = True
+                pause_button.label.set_text("Resume")
+            # Update the chart
+            update_chart()
+
+    # Set auto aspect ratio so simulation and bar chart fit well within the subplot area.
+    ax1.set_aspect("auto")
+    ax2.set_aspect("auto")
+
+    # Change the background color to black.
+    ax1.set_facecolor("black")
+    ax2.set_facecolor("black")
+
+    # Change the text and line colors to white.
+    ax1.tick_params(colors="white")
+    ax1.title.set_color("white")
+    ax2.tick_params(colors="white")
+    ax2.title.set_color("white")
+
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+    # Create an instance of the button handler and connect it to the button.
+    button_handler = ButtonHandler()
+    pause_button.on_clicked(button_handler.pause)
+
+    # interpolation of colours = nearest self explanatory
+    im = ax1.imshow(grid, cmap=cmap, interpolation="nearest")
+
+    # Set the day
+    day = 0
+
+    # Spawn a title for the day
+    dayTitle = ax1.text(
+        0.02, 0.93, "", transform=ax1.transAxes, color="white", fontsize="30"
+    )  # Add a text element to the plot.
+
+    def update_chart():
+        # Clear the chart figure.
+        ax2.clear()
+
+        # Calculate the fractions.
+        num_vegetob = np.count_nonzero(grid == 3)
+        num_erbast = np.count_nonzero(grid == 4)
+        num_carviz = np.count_nonzero(grid == 2)
+        total_cells = N_ROWS * N_COLS
+        fraction_vegetob = num_vegetob / total_cells
+        fraction_erbast = num_erbast / total_cells
+        fraction_carviz = num_carviz / total_cells
+
+        # Define the creatures and fractions lists.
+        creatures = ["Vegetob", "Erbast (Herd)", "Carviz (Pride)"]
+        fractions = [fraction_vegetob, fraction_erbast, fraction_carviz]
+
+        # Draw the chart
+        bar_colors = ["green", "yellow", "red"]
+        ax2.bar(creatures, fractions, color=bar_colors)
+        ax2.set_xlabel("Creatures")
+        ax2.set_ylabel("Fraction of Cells")
+        ax2.set_title("Population of Species")
+        ax2.set_ylim([0, 1])
+
+        # Force a redraw of the figure.
+        fig.canvas.draw()
+
+    # Update the update function
+    def update(day):
+        for creature in Creature.instances:
+            creature.move()
+            if isinstance(creature, Vegetob):
+                creature.grow()
+
+        # Increment the day each time the function is called 1 frame = 1 day
+        day += 1
+        # Set the title to the current day dynamically.
+        dayTitle.set_text(f"Day: {day}")
+        # Update the grid
+        im.set_data(grid)
+
+        # Update the chart
+        update_chart()
+
+        # Return the updated image and title
+        return im, dayTitle
+
+    # Create an animation
+    num_frames = 2000  
+    interval = (
+        1  # Time interval between frames 
+    )
+    anim = FuncAnimation(
+        fig, update, frames=num_frames, interval=interval, repeat=False, blit=True
+    )
+
+    # Display the animation (opens a window with the animated simulation)
+    plt.show()
